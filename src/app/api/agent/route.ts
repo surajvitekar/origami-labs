@@ -1,10 +1,14 @@
 import { ChatOpenAI } from '@langchain/openai'
-import { HumanMessage, AIMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage as LangChainAIMessage } from '@langchain/core/messages'
 import { BufferMemory } from 'langchain/memory'
 import { ConversationChain } from 'langchain/chains'
 import { NextResponse } from 'next/server'
 import { Message } from 'ai'
 import { supabase } from '@/lib/supabase'
+
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('OPENAI_API_KEY environment variable is not set')
+}
 
 // Initialize OpenAI
 const model = new ChatOpenAI({
@@ -13,14 +17,14 @@ const model = new ChatOpenAI({
   openAIApiKey: process.env.OPENAI_API_KEY,
 })
 
-// Initialize memory
-const memory = new BufferMemory()
-
-// Initialize conversation chain
-const chain = new ConversationChain({
-  llm: model,
-  memory: memory,
-})
+// Initialize conversation chain for each request
+const createConversationChain = () => {
+  const memory = new BufferMemory()
+  return new ConversationChain({
+    llm: model,
+    memory: memory,
+  })
+}
 
 export async function POST(req: Request) {
   try {
@@ -36,11 +40,25 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1]
     
     // Convert the message history to LangChain format
-    const history = messages.map((m) => 
+    const formattedHistory = messages.slice(0, -1).map((m) => 
       m.role === 'user' 
         ? new HumanMessage(m.content)
-        : new AIMessage(m.content)
+        : new LangChainAIMessage(m.content)
     )
+
+    // Create a new conversation chain for this request
+    const chain = createConversationChain()
+
+    // Initialize memory with previous messages
+    for (let i = 0; i < formattedHistory.length; i += 2) {
+      const humanMessage = formattedHistory[i]
+      const aiMessage = formattedHistory[i + 1]
+      if (humanMessage && aiMessage) {
+        await chain.call({
+          input: humanMessage.content,
+        })
+      }
+    }
 
     // Get response from LangChain
     const response = await chain.call({
@@ -48,16 +66,21 @@ export async function POST(req: Request) {
     })
 
     // Log the interaction
-    await supabase
-      .from('logs')
-      .insert({
-        event_type: 'agent_interaction',
-        message: lastMessage.content,
-        metadata: {
-          response: response.response,
-          agent_id: 'default'
-        }
-      })
+    try {
+      await supabase
+        .from('logs')
+        .insert({
+          event_type: 'agent_interaction',
+          message: lastMessage.content,
+          metadata: {
+            response: response.response,
+            agent_id: 'default'
+          }
+        })
+    } catch (dbError) {
+      // Don't fail the request if logging fails
+      console.error('Database logging error:', dbError)
+    }
 
     return NextResponse.json({ 
       role: 'assistant',

@@ -1,19 +1,35 @@
 'use client'
 
-import { useState } from 'react'
-import { useChat } from 'ai/react'
+import { useState, useRef, useEffect } from 'react'
+import { useChat, Message } from 'ai/react'
 
 export default function AgentPlayground() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: '/api/agent'
   })
+
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">Agent Playground</h1>
       
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="h-[600px] overflow-y-auto mb-4 space-y-4">
+        {error && (
+          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+            Error: {error.message}
+          </div>
+        )}
+        
+        <div className="h-[600px] overflow-y-auto mb-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -21,17 +37,34 @@ export default function AgentPlayground() {
                 message.role === 'assistant' ? 'justify-start' : 'justify-end'
               }`}
             >
-              <div
-                className={`max-w-[80%] rounded-lg p-4 ${
-                  message.role === 'assistant'
-                    ? 'bg-gray-100 dark:bg-gray-700'
-                    : 'bg-blue-500 text-white'
-                }`}
-              >
-                {message.content}
+              <div className="flex flex-col max-w-[80%]">
+                <span className="text-xs text-gray-500 mb-1">
+                  {message.role === 'assistant' ? 'Assistant' : 'You'}
+                </span>
+                <div
+                  className={`rounded-lg p-4 ${
+                    message.role === 'assistant'
+                      ? 'bg-gray-100 dark:bg-gray-700'
+                      : 'bg-blue-500 text-white'
+                  }`}
+                >
+                  {message.content}
+                </div>
               </div>
             </div>
           ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-lg p-4 bg-gray-100 dark:bg-gray-700">
+                <div className="flex space-x-2">
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
         </div>
 
         <form onSubmit={handleSubmit} className="flex gap-4">
@@ -39,13 +72,15 @@ export default function AgentPlayground() {
             value={input}
             onChange={handleInputChange}
             placeholder="Type your message..."
-            className="flex-1 px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            disabled={isLoading}
+            className="flex-1 px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            disabled={isLoading}
+            className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors"
           >
-            Send
+            {isLoading ? 'Sending...' : 'Send'}
           </button>
         </form>
       </div>
