@@ -3,7 +3,10 @@ import { HumanMessage, AIMessage as LangChainAIMessage } from '@langchain/core/m
 import { BufferMemory } from 'langchain/memory'
 import { ConversationChain } from 'langchain/chains'
 import { NextResponse } from 'next/server'
-import { Message } from 'ai'
+type Message = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
 import { supabase } from '@/lib/supabase'
 
 if (!process.env.OPENAI_API_KEY) {
